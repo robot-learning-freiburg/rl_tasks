@@ -1,5 +1,5 @@
 wheel
-gym
+gymnasium
 hydra.core(>=1.1.0)
 numpy
 hydra
