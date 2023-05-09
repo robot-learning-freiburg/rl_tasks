@@ -1,0 +1,289 @@
+<?xml version="1.0"?>
+
+<robot name="dw_items" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="basic_shape" params="*shape *origin">
+    <visual>
+      <geometry>
+        <xacro:insert_block name="shape"/>
+      </geometry>
+      <xacro:insert_block name="origin"/>
+    </visual>
+    <collision>
+      <geometry>
+        <xacro:insert_block name="shape"/>
+      </geometry>
+      <xacro:insert_block name="origin"/>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_visual" params="length radius *origin_visual">
+    <visual>
+      <geometry>
+        <cylinder length="${length}" radius="${radius}"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0 0 1 1"/>
+      </material>
+      <xacro:insert_block name="origin_visual"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="${length}" radius="${radius}"/>
+      </geometry>
+      <xacro:insert_block name="origin_visual"/>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="loop_items" params="reflect:=1 prongs_set:=^ offset:='False' items:=^">
+    <xacro:if value="${items}">
+      <xacro:property name="item" value="${items.pop(0)}"/>
+      <xacro:if value="${prongs_set.startswith('item')}">
+        <xacro:basic_triangle pos_y="${item}"/>
+      </xacro:if>
+      <xacro:unless value="${prongs_set.startswith('item')}">
+        <xacro:property name="offset_spacing" value="0"/>
+        <xacro:if value="${offset}">
+          <xacro:property name="offset_spacing" value="${-props['prong_set_spacing']}"/>
+        </xacro:if>
+        
+        <xacro:property name="origin_offset_visual_y" value="${sin(radians(props['cy_orientation'])) * props['cy_length']/2}"/>
+        <xacro:property name="origin_offset_visual_z" value="${cos(radians(props['cy_orientation'])) * props['cy_length']/2}"/>
+
+        <xacro:cylinder_visual length="${props['cy_length']}" radius="${props['cy_radius']}">
+          <origin xyz="${offset_spacing} ${item + reflect * origin_offset_visual_y} ${origin_offset_visual_z}" 
+                  rpy="${-reflect*(radians(props['cy_orientation']))} 0 0"/>
+        </xacro:cylinder_visual>
+      </xacro:unless>
+      <xacro:loop_items reflect="${reflect}" offset="${offset}" items="${items}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_array" params="props offset:='False' reflect:=^|1">
+    <xacro:loop_items reflect="${reflect}" offset="${offset}"
+    items="${list([reflect*(x*(((props['array_length']) - props['clearance_start']) -
+            (props['clearance_end']))/(props['n_prongs'] - 1)) for x in python.range(props['n_prongs'])])}"/>
+  </xacro:macro>
+
+  <xacro:macro name="prong_array" params="prongs_set parent tray">
+    <xacro:if value="${'reflect' in tray[prongs_set]}">
+      <xacro:property name="reflect" value="${tray[prongs_set]['reflect']}"/>
+    </xacro:if>
+    <link name="${prongs_set}">
+      <xacro:cylinder_array props="${tray[prongs_set]}"/>
+      <xacro:if value="${'prong_set_spacing' in tray[prongs_set]}">
+        <xacro:cylinder_array props="${tray[prongs_set]}" offset="True"/>
+      </xacro:if>
+    </link>
+    <joint name="${prongs_set}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prongs_set}"/>
+      <xacro:if value="${parent == 'tray_lower'}">
+        <origin xyz="${tray[prongs_set]['link_offset_x']} ${reflect * tray[prongs_set]['clearance_start']} 0" rpy="0 0 0"/>
+      </xacro:if>
+      <xacro:unless value="${parent == 'tray_lower'}">
+      <!-- Origin is rotated pi/2 for the joint for the upper tray -->
+        <origin xyz="${tray[prongs_set]['link_offset_x'] - tray[prongs_set]['clearance_start']} ${tray[prongs_set]['link_offset_y']} 0" rpy="0 0 ${pi/2}"/>
+      </xacro:unless>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="items" params="item parent props">
+    <link name="${item}">
+      <xacro:basic_shape>
+        <box size="${props['array_length']} ${props['l1']} 0.003"/>
+        <origin xyz="0 ${((props['l1']/2) * cos(radians(props['angle1'])))} ${((props['l1']/2) * sin(radians(props['angle1'])))}"
+                rpy="${radians(props['angle1'])} 0 0"/>
+      </xacro:basic_shape>
+      <xacro:if value="${'l3' in props}">
+        <xacro:basic_shape> 
+          <box size="${props['array_length']} ${props['l2']} 0.003"/>
+          <origin xyz="0 ${(props['l1'] * cos(radians(props['angle1']))) + ((props['l2']/2) * cos(radians(props['angle2'])))} ${(props['l1'] * sin(radians(props['angle1']))) + ((props['l2']/2) * sin(radians(props['angle2'])))}"
+                  rpy="${radians(props['angle2'])} 0 0"/>
+        </xacro:basic_shape>
+        <xacro:basic_shape> 
+          <box size="${props['array_length']} ${props['l3']} 0.003"/>
+          <origin xyz="0 ${(props['l1'] * cos(radians(props['angle1']))) + (props['l2'] * cos(radians(props['angle2']))) + ((props['l3']/2) * cos(radians(props['angle3'])))} ${(props['l3']/2) * sin(radians(props['angle3']))}"
+                  rpy="${-radians(props['angle3'])} 0 0"/>
+        </xacro:basic_shape>
+      </xacro:if>
+      <xacro:unless value="${'l3' in props}">
+        <xacro:basic_shape>
+          <box size="${props['array_length']} ${props['l2']} 0.003"/>
+          <origin xyz="0 ${((props['l1']) * cos(radians(props['angle1']))) + ((props['l2']/2) * cos(radians(props['angle2'])))} ${((props['l2']/2) * sin(radians(props['angle2'])))}"
+                  rpy="${-radians(props['angle2'])} 0 0"/>
+        </xacro:basic_shape>
+      </xacro:unless>
+    </link>
+    <joint name="${item}_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${item}"/>
+      <origin xyz="${props['link_offset_x']} ${props['link_offset_y']} 0"
+              rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="basic_box" params="props">
+    <xacro:if value="${'clearance_tray' in props}">
+      <xacro:property name="clearance" value="${props['clearance_tray']}"/>
+    </xacro:if>
+    <xacro:unless value="${'clearance_tray' in props}">
+      <xacro:property name="clearance" value="0"/>
+    </xacro:unless>
+    <xacro:unless value="${'cut' in props}">
+      <xacro:basic_shape>
+        <box size="${props['length'] + props['thickness']} ${props['width'] + props['thickness'] + clearance} ${props['thickness']}"/>
+        <origin xyz="0 0 0"/>
+      </xacro:basic_shape>
+      <xacro:basic_shape>
+        <box size="${props['length'] + props['thickness']} ${props['height']} ${props['thickness']}"/>
+        <origin xyz="0 ${props['width']/2} ${props['height']/2}" rpy="${pi/2} 0 0"/>
+      </xacro:basic_shape>
+      
+      <xacro:basic_shape>
+        <box size="${props['length'] + props['thickness']} ${props['height']} ${props['thickness']}"/>
+        <origin xyz="0 ${-props['width']/2} ${props['height']/2}" rpy="${-pi/2} 0 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width'] + props['thickness']} ${props['thickness']}"/>
+        <origin xyz="${-props['length']/2} 0 ${props['height']/2}" rpy="0 ${pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width'] + props['thickness']} ${props['thickness']}"/>
+        <origin xyz="${props['length']/2} 0 ${props['height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+    </xacro:unless>
+
+    <xacro:if value="${'cut' in props}">
+      <xacro:property name="cut" value="${props['cut']}"/>
+      <xacro:property name="new_width" value="${(props['width']+clearance-cut['length'])*0.5-cut['length']*cos(radians(cut['orientation']))}"/>
+      <xacro:property name="new_origin" value="${cut['length']*(0.5+cos(radians(cut['orientation']))) + 0.5*new_width}"/>
+      <xacro:basic_shape>
+        <box size="${props['length']} ${new_width} ${props['thickness']}"/>
+        <origin xyz="0 ${1*new_origin} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['length']} ${new_width} ${props['thickness']}"/>
+        <origin xyz="0 ${-1*new_origin} 0"/>
+      </xacro:basic_shape>
+
+      <!-- Middle plate -->
+      <xacro:basic_shape>
+        <box size="${props['length']-(cut['length']*sin(radians(cut['orientation'])))} ${cut['length']*(1+2*cos(radians(cut['orientation'])))} ${props['thickness']}"/>
+        <origin xyz="${-cut['length']*sin(radians(cut['orientation']))/2} 0 0"/>
+      </xacro:basic_shape>
+
+      <!-- Angles -->
+      <xacro:basic_shape>
+        <box size="${cut['length']} ${cut['length']} ${props['thickness']}"/>
+        <origin xyz="${props['length']*0.5-cut['length']*sin(radians(cut['orientation']))} ${-cut['length']*(0.5+cos(radians(cut['orientation'])))} 0"
+                rpy="0 0 ${pi/4}"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${cut['length']} ${cut['length']} ${props['thickness']}"/>
+        <origin xyz="${props['length']*0.5-cut['length']*sin(radians(cut['orientation']))} ${cut['length']*(0.5+cos(radians(cut['orientation'])))} 0"
+                rpy="0 0 ${-pi/4}"/>
+      </xacro:basic_shape>
+
+      <!-- Borders -->
+      <xacro:basic_shape>
+        <box size="${props['length']} ${props['height']} ${props['thickness']}"/>
+        <origin xyz="0 ${props['width']/2} ${props['height']/2}" rpy="${pi/2} 0 0"/>
+      </xacro:basic_shape>
+      
+      <xacro:basic_shape>
+        <box size="${props['length']} ${props['height']} ${props['thickness']}"/>
+        <origin xyz="0 ${-props['width']/2} ${props['height']/2}" rpy="${-pi/2} 0 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width']} ${props['thickness']}"/>
+        <origin xyz="${-props['length']/2} 0 ${props['height']/2}" rpy="0 ${pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${cut['length']} ${props['thickness']}"/>
+        <origin xyz="${props['length']*0.5-cut['length']*sin(radians(cut['orientation']))} 0 ${props['height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${new_width-0.5*clearance} ${props['thickness']}"/>
+        <origin xyz="${props['length']/2} ${new_origin-0.25*clearance} ${props['height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${new_width-0.5*clearance} ${props['thickness']}"/>
+        <origin xyz="${props['length']/2} ${-1*(new_origin-0.25*clearance)} ${props['height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <!-- borders for angles -->
+      <xacro:basic_shape>
+        <box size="${props['height']} ${cut['length']} ${props['thickness']}"/>
+        <origin xyz="${props['length']*0.5-0.5*cut['length']*sin(radians(cut['orientation']))} 
+                     ${-0.5*cut['length']*(1+cos(radians(cut['orientation'])))} ${props['height']/2}" 
+                rpy="${pi/4} ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${cut['length']} ${props['thickness']}"/>
+        <origin xyz="${props['length']*0.5-0.5*cut['length']*sin(radians(cut['orientation']))} 
+                     ${0.5*cut['length']*(1+cos(radians(cut['orientation'])))} ${props['height']/2}" 
+                rpy="${-pi/4} ${-pi/2} 0"/>
+      </xacro:basic_shape>
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="basket" params="props parent *origin">
+    <link name="cutlery_basket">
+      <xacro:basic_box props="${props}"/>
+
+      <xacro:basic_shape>
+        <box size="${props['length']} ${props['height']} ${props['thickness']}"/>
+        <origin xyz="0 0 ${props['height']/2}" rpy="${-pi/2} 0 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width']} ${props['thickness']}"/>
+        <origin xyz="0 0 ${props['height']/2}" rpy="0 ${pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width']} ${props['thickness']}"/>
+        <origin xyz="${-props['length']/4} 0 ${props['height']/2}" rpy="0 ${pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['height']} ${props['width']} ${props['thickness']}"/>
+        <origin xyz="${props['length']/4} 0 ${props['height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['handle_height']} ${props['handle_width']} ${props['handle_thickness']}"/>
+        <origin xyz="${-props['length']/2} 0 ${props['height'] + props['handle_height']/2}" rpy="0 ${pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['handle_height']} ${props['handle_width']} ${props['handle_thickness']}"/>
+        <origin xyz="${props['length']/2} 0 ${props['height'] + props['handle_height']/2}" rpy="0 ${-pi/2} 0"/>
+      </xacro:basic_shape>
+
+      <xacro:basic_shape>
+        <box size="${props['length']} ${props['handle_width']} ${props['handle_thickness']}"/>
+        <origin xyz="0 0 ${props['height'] + props['handle_height']}" rpy="0 ${pi} 0"/>
+      </xacro:basic_shape>
+
+    </link>
+
+    <joint name="cutlery_basket_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="cutlery_basket"/>
+      <xacro:insert_block name="origin"/>
+    </joint>
+  </xacro:macro>
+
+
+</robot>

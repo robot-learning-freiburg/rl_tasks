@@ -1,0 +1,160 @@
+global: 
+  tray_length: 0.52 
+  tray_width: 0.52 
+  tray_height: 0.1 
+  tray_thickness: 0.005 
+  clearance_tray: 0.03 
+  tray_lower_height_clearance: 0.1 
+  tray_upper_height_clearance: 0.43             # 0.33 height of upper tray from lower tray 
+  
+  casing_length: 0.52      # base link set on casing 
+  casing_width: 0.59 
+  casing_height: 0.68
+  casing_thickness: 0.03
+
+door: 
+  handle_length: 0.4
+  handle_width: 0.05
+  handle_thickness: 0.02
+  handle_extrusion: 0.1
+  handle_offset_z: 0.55
+  tablet_pocket:
+    width: 0.12
+    length: 0.1
+    height: 0.02
+    link_offset: 0.16
+    pocket_1: 0.045
+    thickness: 0.005
+    thickness_plate: 0.002
+
+bottom_tray: 
+
+  top_prongs_set: &TOP_PRONGS_SET 
+    clearance_start: 0.01    # cy_length/10 
+    clearance_end: 0.02      # cy_length/2 
+    link_offset_x: -0.06     # tray_length/8
+    prong_set_spacing: 0.1    # tray_length/5 
+    n_prongs: 12 
+    cy_length: 0.07 
+    cy_radius: 0.002 
+    cy_orientation: 20 
+    array_length: 0.255     # tray_width/2 
+ 
+  top_left_prongs_set: 
+    <<: *TOP_PRONGS_SET 
+    reflect: -1 
+
+  top_right_prongs_set:  
+    <<: *TOP_PRONGS_SET 
+    reflect: 1 
+
+  bottom_prongs_set: &BOTTOM_PRONGS_SET 
+    clearance_start: 0.06     
+    clearance_end: 0.05      # cy_length/2 
+    link_offset_x: 0.18       
+    prong_set_spacing: 0.105    # tray_length/5 
+    cy_length: 0.095 
+    cy_radius: 0.002 
+    cy_orientation: 20 
+    array_length: 0.26     # tray_width/2 
+
+  bottom_left_prongs_set: 
+    <<: *BOTTOM_PRONGS_SET 
+    reflect: -1 
+    n_prongs: 7 
+
+  bottom_right_prongs_set: 
+    <<: *BOTTOM_PRONGS_SET
+    reflect: 1 
+    n_prongs: 5 
+
+  basket: 
+    length: 0.235              # close to tray_length/2 
+    width: 0.12               # bottom prongs center clearance 
+    height: 0.13 
+    thickness: 0.005 
+    position_x: 0.1425         # tray_length/2 - basket_length/2 
+    position_y: 0 
+    handle_height: 0.07 
+    handle_width: 0.015 
+    handle_thickness: 0.015 
+
+top_tray: 
+
+  fan: 
+    length: 0.46 
+    width: 0.05 
+    thickness: 0.01 
+    height_origin: 0.01 
+
+  angle_plate:
+    length: 0.09
+    orientation: 45
+
+  upper_left_prongs_set: &UPPER_LEFT_PRONGS_SET 
+    clearance_start: 0.02    # cy_length/10 
+    clearance_end: 0.04      # cy_length/2 
+    link_offset_x: -0.05     # tray_length/8 
+    link_offset_y: -0.06         
+    prong_set_spacing: 0.075    # tray_length/5 
+    n_prongs: 6 
+    cy_length: 0.09 
+    cy_radius: 0.002 
+    cy_orientation: 10 
+    reflect: 1 
+    array_length: 0.21     # Upper and lower should sum to tray_length 
+
+  lower_left_prongs_set: 
+    <<: *UPPER_LEFT_PRONGS_SET  
+    clearance_start: 0.06     
+    clearance_end: 0.01      
+    link_offset_x: 0.26       # tray_length/2 at the start of the tray         
+    cy_length: 0.07 
+    cy_orientation: 17 
+    n_prongs: 10 
+    array_length: 0.31     # Upper and lower should sum to tray_length 
+   
+  right_prongs_set: &RIGHT_PRONGS_SET 
+    clearance_start: 0.08 
+    clearance_end: 0.01 
+    link_offset_x: 0.26     # tray_length/2 at the start of the tray 
+    link_offset_y: 0.07  
+    n_prongs: 11 
+    cy_length: 0.075 
+    cy_radius: 0.002 
+    cy_orientation: 0 
+    radius: 0.002 
+    array_length: 0.51     # tray_length  
+
+  item_left: 
+    <<: *RIGHT_PRONGS_SET 
+    l1: 0.035 
+    angle1: 55 
+    l2: 0.035 
+    angle2: 55      # wrt base
+    n_prongs: 15 
+    link_offset_x: 0
+    link_offset_y: -0.2 
+
+  item_center: 
+    <<: *RIGHT_PRONGS_SET 
+    l1: 0.03
+    angle1: 70 
+    l2: 0.078
+    angle2: 21    # wrt base
+    link_offset_x: -0.03
+    link_offset_y: -0.03
+    array_length: 0.45 
+    clearance_start: 0 
+    clearance_end: 0 
+
+  item_right: 
+    <<: *RIGHT_PRONGS_SET 
+    l1: 0.03 
+    angle1: 85 
+    l2: 0.035 
+    angle2: 45    # joining l1
+    l3: 0.065
+    angle3: 60    # wrt base
+    link_offset_x: 0
+    link_offset_y: 0.15

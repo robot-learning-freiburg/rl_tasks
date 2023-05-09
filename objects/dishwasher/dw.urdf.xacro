@@ -1,0 +1,175 @@
+<?xml version="1.0"?>
+
+<robot name="dw" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="params_file" default="$(find rl_sim_tasks)/config/dishwasher_params.yaml"/>
+  <xacro:property name="params" value="${xacro.load_yaml(xacro.arg('params_file'))}" />
+  <xacro:include filename="$(find rl_sim_tasks)/objects/dishwasher/dw_items.urdf.xacro"/>
+
+  <link name="base_link">
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_length']} ${params['global']['casing_width'] + params['global']['casing_thickness']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:basic_shape>
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_length']} ${params['global']['casing_height']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="0 ${params['global']['casing_width']/2} ${params['global']['casing_height']/2}" rpy="${pi/2} 0 0"/>
+    </xacro:basic_shape>
+    
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_length']} ${params['global']['casing_height']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="0 ${-params['global']['casing_width']/2} ${params['global']['casing_height']/2}" rpy="${-pi/2} 0 0"/>
+    </xacro:basic_shape>
+
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_height'] + params['global']['casing_thickness']} ${params['global']['casing_width'] + params['global']['casing_thickness']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="${-params['global']['casing_length']/2} 0 ${params['global']['casing_height']/2}" rpy="0 ${pi/2} 0"/>
+    </xacro:basic_shape>
+
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_length']} ${params['global']['casing_width'] + params['global']['casing_thickness']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="0 0 ${params['global']['casing_height']}" rpy="0 0 0"/>
+    </xacro:basic_shape>
+  </link>
+
+  <link name="door">
+    <xacro:basic_shape>
+      <box size="${params['global']['casing_height'] + params['global']['casing_thickness']} ${params['global']['casing_width'] + params['global']['casing_thickness']} ${params['global']['casing_thickness']}"/>
+      <origin xyz="0 0 ${params['global']['casing_height']/2}" rpy="0 ${pi/2} 0"/>
+    </xacro:basic_shape>
+
+    <xacro:basic_shape>
+      <box size="${params['door']['handle_thickness']} ${params['door']['handle_length'] + params['door']['handle_thickness']} ${params['door']['handle_width']}"/>
+      <origin xyz="${params['door']['handle_extrusion']} 0 ${params['door']['handle_offset_z']}" rpy="0 0 0"/>
+    </xacro:basic_shape>
+
+    <xacro:basic_shape>
+      <box size="${params['door']['handle_extrusion']} ${params['door']['handle_thickness']} ${params['door']['handle_width']}"/>
+      <origin xyz="${params['door']['handle_extrusion']/2} ${-params['door']['handle_length']/2} ${params['door']['handle_offset_z']}" rpy="0 0 0"/>
+    </xacro:basic_shape>
+
+    <xacro:basic_shape>
+      <box size="${params['door']['handle_extrusion']} ${params['door']['handle_thickness']} ${params['door']['handle_width']}"/>
+      <origin xyz="${params['door']['handle_extrusion']/2} ${params['door']['handle_length']/2} ${params['door']['handle_offset_z']}" rpy="0 0 0"/>
+    </xacro:basic_shape>
+
+  </link>
+  <joint name="door_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="door"/>
+    <origin xyz="${(params['global']['casing_length'] + params['global']['casing_thickness'])/2} 0 0" rpy="0 ${pi/2} 0"/>
+    <axis xyz="0 1 0"/>
+    <limit upper="0" lower="-${pi/2}" effort="5" velocity="1"/>
+  </joint>
+  
+
+  <link name="tray_lower">
+    <xacro:basic_box props="${dict(length=params['global']['tray_length'], width=params['global']['tray_width'], 
+                              height=params['global']['tray_height'], thickness=params['global']['tray_thickness'],
+                              clearance_tray=params['global']['clearance_tray'])}"/>
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+
+  <joint name="tray_lower_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child link="tray_lower"/>
+    <origin xyz="0 0 ${params['global']['tray_lower_height_clearance']}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit upper="${params['global']['tray_length'] * 0.95}" lower="0" effort="5" velocity="1"/>
+  </joint>
+
+  <xacro:basket props="${params['bottom_tray']['basket']}" parent="tray_lower">
+    <origin xyz="${params['bottom_tray']['basket']['position_x']} ${params['bottom_tray']['basket']['position_y']} 0" rpy="0 0 0"/>
+  </xacro:basket>
+
+  <!-- Top set of prongs -->
+  <xacro:prong_array prongs_set="top_left_prongs_set" parent="tray_lower" tray="${params['bottom_tray']}"/>
+  <xacro:prong_array prongs_set="top_right_prongs_set" parent="tray_lower" tray="${params['bottom_tray']}"/>
+
+  <!-- Bottom set of prongs -->
+  <xacro:prong_array prongs_set="bottom_left_prongs_set" parent="tray_lower" tray="${params['bottom_tray']}"/>
+  <xacro:prong_array prongs_set="bottom_right_prongs_set" parent="tray_lower" tray="${params['bottom_tray']}"/>
+  
+  <link name="tray_upper">
+    <xacro:basic_box props="${dict(length=params['global']['tray_length'], width=params['global']['tray_width'], 
+                              height=params['global']['tray_height'], thickness=params['global']['tray_thickness'],
+                              clearance_tray=params['global']['clearance_tray'], cut=params['top_tray']['angle_plate'])}"/>
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+
+  <joint name="tray_upper_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child link="tray_upper"/>
+    <origin xyz="0 0 ${params['global']['tray_upper_height_clearance']}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit upper="${params['global']['tray_length'] * 0.95}" lower="0" effort="5" velocity="1"/>
+  </joint>
+
+  <link name="fan">
+    <xacro:basic_shape>
+      <box size="${params['top_tray']['fan']['length']} ${params['top_tray']['fan']['width']} ${params['top_tray']['fan']['thickness']}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </xacro:basic_shape>
+  </link>
+  <joint name="fan_joint" type="continuous">
+    <parent link="tray_upper"/>
+    <child link="fan"/>
+    <origin xyz="0 0 ${-params['top_tray']['fan']['height_origin']}" rpy="0 0 ${pi/2}"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <xacro:property name="pocket" value="${params['door']['tablet_pocket']}"/>
+  <link name="tablet_pocket">
+    <xacro:basic_box props="${pocket}"/>
+    <xacro:basic_shape>
+      <box size="${pocket['length']} ${pocket['height']} ${pocket['thickness']}"/>
+      <origin xyz="0 ${-pocket['width']*0.5+pocket['pocket_1']} ${2*pocket['thickness']}" rpy="${pi/2} 0 0"/>
+    </xacro:basic_shape>
+  </link>
+  <joint name="tablet_pocket_joint" type="fixed">
+    <parent link="door"/>
+    <child link="tablet_pocket"/>
+    <origin xyz="${-params['global']['casing_thickness']/2} 0 ${params['global']['casing_height'] - pocket['link_offset']}" rpy="${pi} ${pi/2} 0"/>
+  </joint>
+
+  <link name="tablet_small">
+    <xacro:basic_shape>
+      <box size="${pocket['length']} ${pocket['pocket_1'] - pocket['thickness']} ${pocket['thickness_plate']}"/>
+      <origin xyz="${pocket['length']/2} 0 0" rpy="0 0 0"/>
+    </xacro:basic_shape>
+  </link>
+  <joint name="tablet_small_joint" type="revolute">
+    <parent link="tablet_pocket"/>
+    <child link="tablet_small"/>
+    <origin xyz="${-pocket['length']/2} ${(-pocket['width']*0.5+pocket['pocket_1']*0.5)} ${pocket['height']}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit upper="0" lower="${-radians(150)}" effort="5" velocity="1"/>
+  </joint>
+
+  <link name="tablet_big">
+    <xacro:basic_shape>
+      <box size="${pocket['length']} ${pocket['width'] - pocket['pocket_1'] - pocket['thickness']} ${pocket['thickness_plate']}"/>
+      <origin xyz="${pocket['length']/2} 0 0" rpy="0 0 0"/>
+    </xacro:basic_shape>
+  </link>
+  <joint name="tablet_big_joint" type="prismatic">
+    <parent link="tablet_pocket"/>
+    <child link="tablet_big"/>
+    <origin xyz="${-pocket['length']/2} ${(pocket['pocket_1']*0.5)} ${pocket['height']}" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/>
+    <limit upper="${pocket['length']*0.5}" lower="0" effort="5" velocity="1"/>
+  </joint>
+
+  <xacro:prong_array prongs_set="lower_left_prongs_set" parent="tray_upper" tray="${params['top_tray']}"/>
+  <xacro:prong_array prongs_set="upper_left_prongs_set" parent="tray_upper" tray="${params['top_tray']}"/>
+  <xacro:prong_array prongs_set="right_prongs_set" parent="tray_upper" tray="${params['top_tray']}"/>
+  <xacro:items item="item_left" parent="tray_upper" props="${params['top_tray']['item_left']}"/>
+  <xacro:items item="item_center" parent="tray_upper" props="${params['top_tray']['item_center']}"/>
+  <xacro:items item="item_right" parent="tray_upper" props="${params['top_tray']['item_right']}"/>
+
+</robot>
