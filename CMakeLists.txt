@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(rl_sim_tasks)
+project(rl_tasks)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -9,7 +9,7 @@ project(rl_sim_tasks)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  iai_bullet_sim
+  prime_bullet
   rospy
   std_msgs
 )

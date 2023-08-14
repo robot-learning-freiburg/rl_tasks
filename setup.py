@@ -13,7 +13,7 @@ try:
    from distutils.core import setup
 
    d = generate_distutils_setup(
-      packages=['rl_sim_tasks'],
+      packages=['rl_tasks'],
       package_dir={'': 'src'}
    )
 
@@ -28,12 +28,12 @@ except ModuleNotFoundError:
       version='0.0.1',
       author='Adrian Roefer',
       author_email='aroefer@cs.uni-freiburg.de',
-      packages=['rl_sim_tasks'],
+      packages=['rl_tasks'],
       package_dir={'': 'src'},
       # scripts=['bin/script1','bin/script2'],
-      url='http://pypi.python.org/pypi/rl_sim_tasks/',
+      url='http://pypi.python.org/pypi/rl_tasks/',
       license='LICENSE',
-      description='A collection of object models and micor scenarios for doing '
+      description='A collection of object models and micro scenarios for doing '
                   'mobile manipulation in the Freiburg RL kitchen environment.',
       # long_description=open('README.txt').read(),
       install_requires=pip_dependencies,

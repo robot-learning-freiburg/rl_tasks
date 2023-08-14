@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>rl_sim_tasks</name>
+  <name>rl_tasks</name>
   <version>0.0.0</version>
   <description>The sim_tasks package</description>
 
@@ -51,15 +51,15 @@
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>geometry_msgs</build_depend>
-  <build_depend>iai_bullet_sim</build_depend>
+  <build_depend>prime_bullet</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_export_depend>geometry_msgs</build_export_depend>
-  <build_export_depend>iai_bullet_sim</build_export_depend>
+  <build_export_depend>prime_bullet</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>iai_bullet_sim</exec_depend>
+  <exec_depend>prime_bullet</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
 
