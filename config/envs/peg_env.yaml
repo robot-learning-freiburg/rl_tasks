@@ -7,7 +7,7 @@ action_frequency: 30
 # Configuration of the board in which the robot should insert the peg
 board:
   # Path to the URDF file of the board
-  path: package://bopt_gmm/objects/board_easy.urdf
+  path: package://rl_tasks/objects/board_easy.urdf
   # Bounds of the position sampling of the board.
   # XYZ world coordinates in meters.
   sampler:
@@ -17,7 +17,7 @@ board:
 # Configuration of the peg to be inserted
 peg:
   # Path to the URDF file of the peg
-  path: package://bopt_gmm/objects/cylinder.urdf
+  path: package://rl_tasks/objects/cylinder.urdf
 
 # Observational noise
 noise:
@@ -40,7 +40,7 @@ noise:
 # Robot configuration
 robot:
   # Path to the URDF file of the robot
-  path: package://bopt_gmm/robots/panda_hand.urdf
+  path: package://rl_tasks/robots/panda_hand.urdf
   # Name of end-effector link
   eef: panda_hand_tcp
   # Name of the joint measuring external wrench

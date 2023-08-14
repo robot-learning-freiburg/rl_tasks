@@ -10,7 +10,7 @@ open_threshold: 35 # Degrees
 # Configuration of the door
 door:
   # Path to the URDF file of the door
-  path: package://bopt_gmm/objects/door.urdf
+  path: package://rl_tasks/objects/door.urdf
   # Name of the root link
   reference_link: base_link
   # Bounds of the position sampling of the door.
@@ -48,7 +48,7 @@ noise:
 # Robot configuration
 robot:
   # Path to the URDF file of the robot
-  path: package://bopt_gmm/robots/panda_hand.urdf
+  path: package://rl_tasks/robots/panda_hand.urdf
   # Name of end-effector link
   eef: panda_hand_tcp
   # Name of the joint measuring external wrench
