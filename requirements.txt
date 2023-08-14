@@ -1,7 +1,7 @@
 wheel
 gymnasium
 hydra.core(>=1.1.0)
-numpy
+numpy>=1.20
 hydra
 ConfigSpace==0.6.0
 roboticstoolbox-python

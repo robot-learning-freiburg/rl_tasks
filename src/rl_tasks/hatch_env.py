@@ -20,9 +20,9 @@ from prime_bullet import Simulator,         \
                          CartesianRelativePointCOrientationController
 
 
-from gym.spaces import Box  as BoxSpace, \
-                       Dict as DictSpace
-from gym        import Env
+from gymnasium.spaces import Box  as BoxSpace, \
+                             Dict as DictSpace
+from gymnasium        import Env
 
 from .utils     import BoxSampler, \
                        NoiseSampler

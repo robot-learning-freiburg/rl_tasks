@@ -24,9 +24,9 @@ from prime_bullet import Point3,            \
 
 from multiprocessing import RLock
 
-from gym.spaces import Box  as BoxSpace, \
-                       Dict as DictSpace
-from gym        import Env
+from gymnasium.spaces import Box  as BoxSpace, \
+                             Dict as DictSpace
+from gymnasium        import Env
 
 from .utils     import BoxSampler, \
                        NoiseSampler

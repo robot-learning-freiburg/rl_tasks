@@ -20,9 +20,9 @@ from prime_bullet import Simulator,         \
                          CartesianRelativePointCOrientationController
 
 
-from gym.spaces import Box  as BoxSpace, \
-                       Dict as DictSpace
-from gym        import Env
+from gymnasium.spaces import Box  as BoxSpace, \
+                             Dict as DictSpace
+from gymnasium        import Env
 
 from .utils     import BoxSampler, \
                        NoiseSampler
@@ -121,7 +121,7 @@ class PegEnv(Env):
     def action_space(self):
         """End effector position and gripper width relative displacement"""
         return DictSpace({'motion':  BoxSpace(-np.ones(3), np.ones(3)),
-                          'gripper': BoxSpace(0, 1, shape=(1,))})
+                          'gripper': BoxSpace(-1, 1, shape=(1,))})
 
     @property
     def neutral_action(self):
@@ -130,7 +130,7 @@ class PegEnv(Env):
         Returns:
             dict: Neutral action.
         """
-        return {'motion': np.zeros(3), 'gripper': 0.5}
+        return {'motion': np.zeros(3), 'gripper': -1.0}
 
     def reset(self, initial_conditions=None):
         """Resets the environment. Optionally the state can be set using a dictionary
