@@ -58,3 +58,76 @@ class NoiseSampler(object):
             raise Exception(f'Expected noise sample to be of shape {self.dim}, but got {sample.dim}')
         
         self._noise = sample
+
+try:
+    import rospy
+
+    from sensor_msgs.msg import Joy as JoyMsg
+
+    class Gamepad():
+        def __init__(self, joystick_topic='/joy') -> None:
+            self._button_names = 'a b x y lb rb cl cr unknown l3 r3'.split(' ')
+            self._button_indices = {b: x for x, b in enumerate(self._button_names)}
+            self.reset()
+
+            self._sub_js = rospy.Subscriber(joystick_topic, JoyMsg, self._cb_joy, queue_size=1)
+
+        def reset(self):
+            self._left_stick   = np.zeros(2)
+            self._right_stick  = np.zeros(2)
+            self._d_pad        = np.zeros(2)
+            self._left_trigger  = 0.0
+            self._right_trigger = 0.0
+            self._button_states = None
+
+        def _cb_joy(self, msg : JoyMsg):
+            self._left_stick    = np.asarray(msg.axes[:2])
+            self._left_trigger  = msg.axes[2]
+            self._right_stick   = np.asarray(msg.axes[3:5])
+            self._right_trigger = msg.axes[5]
+            self._d_pad         = np.asarray(msg.axes[-2:])
+            self._button_states = msg.buttons
+
+        @property
+        def left_stick(self):
+            return self._left_stick
+
+        @property
+        def right_stick(self):
+            return self._right_stick
+
+        @property
+        def dpad(self):
+            return self._dpad
+
+        @property
+        def stacked_axes(self):
+            """Returns the state of all "axes" values as column vector.
+               Meant to apply a linear map to it.
+
+               Order is: [L-stick, R-stick, D-pad, LT, RT, A, B, X, Y, LB, RB, CL, CR, U, L3, R3].T 
+            """
+            if self._button_states is None:
+                raise RuntimeError(f'Gamepad has received no messages. Please use .is_ready to wait for that to change.')
+
+            return np.hstack((self._left_stick, self._right_stick, self._d_pad, 
+                              (self._left_trigger, self._right_trigger), self._button_states)).reshape((19, 1))
+
+        @property
+        def is_ready(self):
+            return self._button_states is not None
+
+        def is_pressed(self, key):
+            if self._button_states is None:
+                raise RuntimeError(f'Gamepad has received no messages. Please use .is_ready to wait for that to change.')
+
+            key = key.lower()
+            if key in self._button_indices:
+                return self._button_states[self._button_indices[key]]
+            raise KeyError(f'Unknown key "{key}". Options are: {list(self._button_states.keys())}')
+
+
+except ModuleNotFoundError:
+    class Gamepad():
+        def __init__(self, *args) -> None:
+            raise NotImplementedError('Need rospy to instantiate gamepad')

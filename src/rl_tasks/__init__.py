@@ -3,6 +3,7 @@ from .door_env import DoorEnv
 from .real_drawer_env import RealDrawerEnv
 from .real_door_env   import RealDoorEnv
 from .hatch_env       import HatchEnv
+from .utils           import Gamepad
 
 ENV_TYPES = {'door': DoorEnv,
              'peg' : PegEnv,
