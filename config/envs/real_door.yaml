@@ -50,3 +50,10 @@ robot:
   f_ext_limit: [12, 12, 35]
   # Set to True if robot is on the FMM. Enables check of tower collisions.
   is_fmm: False
+
+teleop:
+  gamepad:
+    # Cols.:  LX  LY  RX  RY  DX  DY  LT  RT   A  LB  RB  L3  R3 BIAS
+    motion: [[ 0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   0],
+             [ 0,  0,  0, -1,  0,  0,  0,  0,  0,  0,  0,  0,  0,   0],
+             [ 0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   0]]
