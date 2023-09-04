@@ -12,6 +12,10 @@ try:
     from kv_lite import gm
     
     from roebots import ROSVisualizer
+    
+    from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
+    from std_msgs.msg      import Float64       as Float64Msg
+    from sensor_msgs.msg   import Joy           as JoyMsg
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
 
@@ -31,9 +35,6 @@ from gymnasium        import Env
 from .utils     import BoxSampler, \
                        NoiseSampler
 
-from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
-from std_msgs.msg      import Float64       as Float64Msg
-from sensor_msgs.msg   import Joy           as JoyMsg
 
 VCONTROL_CLAMP = 0.06
 
@@ -43,7 +44,10 @@ class TotalRobotFailure(Exception):
 
 class RealDoorEnv(Env):
     def __init__(self, cfg, show_gui=False):
-        rospy.init_node('bopt_gmm_real_door')
+        try:
+            rospy.init_node('real_door_env')
+        except rospy.exceptions.ROSException:
+            print(f'{type(self)}: Not starting ROS node because one already exists.')
 
         # Only used for IK
         self._sim = pb.Simulator()
@@ -55,8 +59,8 @@ class RealDoorEnv(Env):
         self._ik_model = self._sim.load_urdf('/tmp/robot_description.urdf', useFixedBase=True)
 
 
-        self.workspace = AABB(Point3(0.4, -0.3,  0.1), 
-                              Point3(0.8,  0.3,  0.7))
+        self.workspace = AABB(Point3(0.4, -0.30,  0.2), 
+                              Point3(0.8,  0.18,  0.6))
 
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
@@ -202,6 +206,47 @@ class RealDoorEnv(Env):
         else:
             raise TotalRobotFailure('Robot does not move.')
 
+    def _run_evac_behavior(self):
+        """Decides which strategy to take when moving the gripper back from the handle."""
+        while self._ref_R_door is None:
+            print('Waiting for door to be registered')
+            rospy.sleep(0.05)
+        
+        ref_T_ee_goal = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
+        if ref_T_ee_goal.position.z <= 0.26 or ref_T_ee_goal.position.z >= 0.42:
+            mode = 'move_back'
+        else:
+            mode = 'move_to_center'
+        
+        while True:
+            if mode == 'move_to_center':
+                ref_T_ee_goal = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
+
+                if np.abs(self._handle_safe_height - ref_T_ee_goal.position.z) > self._handle_safe_delta:
+                    robot_T_ee_goal = self._robot.state.O_T_EE * 1
+                    robot_T_ee_goal[2, 3] += 0.03 * np.sign(self._handle_safe_height - ref_T_ee_goal.position.z)
+                    self._robot.async_move_ee_cart_absolute(robot_T_ee_goal)
+                    # print('bot')
+                else:
+                    angle = self._calculate_door_angle()
+                    if angle <= 0.08:
+                        break
+                    print(f'Waiting for door angle to be less than 0.08. Currently: {angle}')
+            elif mode == 'move_back':
+                ref_T_ee_goal = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
+
+                if ref_T_ee_goal.position.x > 0.54:
+                    robot_T_ee_goal = self._robot.state.O_T_EE * 1
+                    robot_T_ee_goal[0, 3] -= 0.03
+                    self._robot.async_move_ee_cart_absolute(robot_T_ee_goal)
+                else:
+                    angle = self._calculate_door_angle()
+                    if angle <= 0.08:
+                        break
+                    print(f'Waiting for door angle to be less than 0.08. Currently: {angle}')
+            
+            rospy.sleep(0.3)
+
     def reset(self, initial_conditions=None):
         if initial_conditions is not None:
             raise NotImplementedError
@@ -228,43 +273,27 @@ class RealDoorEnv(Env):
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 print(f'Trying to lookup reference frame {self._ref_frame} in {self._robot_frame}')
 
-        print('Bla')
+        print('Moving robot to save pose to abandon handle...')
         self._robot.cm.recover_error_state()
-        while True:
-            if self._ref_R_door is None:
-                print('Waiting for door to be registered')
-            else:
-                ref_T_ee_goal = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
+        self._run_evac_behavior()
 
-                if np.abs(self._handle_safe_height - ref_T_ee_goal.position.z) > self._handle_safe_delta:
-                    robot_T_ee_goal = self._robot.state.O_T_EE * 1
-                    robot_T_ee_goal[2, 3] += 0.03 * np.sign(self._handle_safe_height - ref_T_ee_goal.position.z)
-                    self._robot.async_move_ee_cart_absolute(robot_T_ee_goal)
-                    # print('bot')
-                else:
-                    angle = self._calculate_door_angle()
-                    if angle <= 0.08:
-                        break
-                    print(f'Waiting for door angle to be less than 0.08. Currently: {angle}')
-
-            rospy.sleep(0.3)
-
-        print('Bla2')
+        print('Moved robot to safe pose to leave handle.')
         while not self._robot.is_operational:
             print('Waiting for robot to become operational again...')
             rospy.sleep(0.3)
 
-        print('Bla3')
         # Reset joint space position every couple of episodes
         if self._n_reset % self._joint_reset_every == 0:
+            print('Moving robot to home...')
             self.home()
 
-        print('Bla4')
+        print('Calculating new starting pose...')
         while True:
             starting_position = self._robot_T_ref.dot(Point3(*self.starting_position_sampler.sample()))
             starting_pose     = Transform(starting_position, self._ik_ee_rot)
 
-            q_start = self._ik_ee_link.ik(starting_pose)
+            # Exclude gripper from IK result
+            q_start = self._ik_ee_link.ik(starting_pose)[:7]
 
             # if ik_success:
             if self._is_tower_collision(q_start):
@@ -273,10 +302,11 @@ class RealDoorEnv(Env):
 
             break
 
-        print('Bla5')
+        print(f'Moving robot to new starting pose: {starting_pose} ({q_start})')
         rospy.sleep(0.3)
-        for tries in range(5):
+        for tries in range(30):
             try:
+                self._robot.authorize_reset()
                 self._robot.move_joint_position(q_start, vel_scale=0.15)
                 break
             except RobotUnresponsiveException:
@@ -298,7 +328,7 @@ class RealDoorEnv(Env):
         self.pub_ang_stiffness.publish(msg_ang_stiffness)
         rospy.sleep(0.3)
 
-        print('Bla6')
+        print('Reset done!')
         self._elapsed_steps = 0
         
         self._n_reset +=1

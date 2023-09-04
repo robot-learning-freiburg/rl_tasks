@@ -10,6 +10,8 @@ try:
     import spatialmath     as sm
     
     from roebots import ROSVisualizer
+    from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
+    from std_msgs.msg      import Float64       as Float64Msg
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
 
@@ -26,9 +28,6 @@ from gymnasium        import Env
 from .utils     import BoxSampler, \
                        NoiseSampler
 
-from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
-from std_msgs.msg      import Float64       as Float64Msg
-
 
 VCONTROL_CLAMP = 0.05
 
@@ -38,7 +37,10 @@ class TotalRobotFailure(Exception):
 
 class RealDrawerEnv(Env):
     def __init__(self, cfg, show_gui=False):
-        rospy.init_node('bopt_gmm_real_drawer')
+        try:
+            rospy.init_node('real_drawer_env')
+        except rospy.exceptions.ROSException:
+            print(f'{type(self)}: Not starting ROS node because one already exists.')
 
         # Only used for IK
         self._ik_model = rp.models.Panda()
