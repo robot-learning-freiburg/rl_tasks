@@ -96,6 +96,7 @@ The gamepad config specifies actions via linear maps of controls to the action s
 
 ```yaml
 teleop:
+  gamepad:
     # Cols.:  LX  LY  RX  RY  DX  DY  LT  RT   A  LB  RB  L3  R3 BIAS
     motion: [[ 0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   0],
              [ 0,  0,  0, -1,  0,  0,  0,  0,  0,  0,  0,  0,  0,   0],
