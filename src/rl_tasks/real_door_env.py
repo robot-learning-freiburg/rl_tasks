@@ -18,6 +18,7 @@ try:
     from sensor_msgs.msg   import Joy           as JoyMsg
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
+    JoyMsg = type(None)
 
 import prime_bullet as pb
 from prime_bullet import Point3,            \
