@@ -6,17 +6,19 @@ from functools       import lru_cache
 try:
     from rl_franka.panda import Panda, \
                                 RobotUnresponsiveException
-    import roboticstoolbox as rp
-    import spatialmath     as sm
     
     from roebots import ROSVisualizer
     from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
     from std_msgs.msg      import Float64       as Float64Msg
+    from sensor_msgs.msg   import Joy           as JoyMsg
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
 
-from prime_bullet import Point3,            \
+from prime_bullet import Simulator,         \
+                         Point3,            \
                          Vector3,           \
+                         Quaternion,        \
+                         Transform,         \
                          AABB
 
 from multiprocessing import RLock
@@ -43,10 +45,16 @@ class RealDrawerEnv(Env):
             print(f'{type(self)}: Not starting ROS node because one already exists.')
 
         # Only used for IK
-        self._ik_model = rp.models.Panda()
+        self._sim = Simulator()
+        self._sim.init('direct')
+        
+        with open('/tmp/robot_description.urdf', 'w') as f:
+            f.write(rospy.get_param('robot_description'))
 
-        self.workspace = AABB(Point3(-0.4, -0.4, 0), 
-                              Point3( 0.4,  0.4, 0.7))
+        self._ik_model = self._sim.load_urdf('/tmp/robot_description.urdf', useFixedBase=True)
+
+        self.workspace = AABB(Point3(0.4, -0.3, 0.15), 
+                              Point3(1.0,  0.3, 0.5))
 
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
@@ -57,8 +65,9 @@ class RealDrawerEnv(Env):
         self._robot   = Panda(cfg.robot.state_prefix, 
                               cfg.robot.controllers_prefix)
 
-        self._ref_frame    = cfg.reference_frame
-        self._drawer_frame = cfg.drawer_frame
+        self._ref_frame        = cfg.reference_frame
+        self._drawer_frame     = cfg.drawer_frame
+        self._drawer_measurement_frame = cfg.drawer_measurement_frame
         self._target_position  = cfg.open_position
         self._handle_safe_zone = AABB(Point3(*cfg.handle_safe_zone.min), 
                                       Point3(*cfg.handle_safe_zone.max))
@@ -69,13 +78,17 @@ class RealDrawerEnv(Env):
         self._ref_T_robot         = None
         self._current_drawer_pose = None
         self._ref_P_drawer        = None
+        self._should_reset        = False
 
         self._robot_frame = cfg.robot.reference_frame
         self._ee_frame    = cfg.robot.endeffector_frame
 
         self._arm_reset_pose = np.asarray(cfg.robot.initial_pose.q)
 
-        self._ee_rot = self._ik_model.fkine(self._arm_reset_pose).R
+        self._ik_model.set_joint_positions(self._arm_reset_pose)
+        self._ik_ee_link = self._ik_model.links[self._ee_frame]
+        self._ik_ee_rot  = self._ik_ee_link.pose.quaternion
+        self._ee_rot     = None
 
         self._vis = ROSVisualizer('~/vis', world_frame='panda_link0') if show_gui else None
 
@@ -93,6 +106,8 @@ class RealDrawerEnv(Env):
         self.pub_ang_stiffness = rospy.Publisher('/controllers/cartesian_impedance_controller/update_stiffness/angular/f', 
                                                  Float64Msg, tcp_nodelay=True, queue_size=1)
 
+        self._sub_joy = rospy.Subscriber('/joy', JoyMsg, callback=self._cb_joy, queue_size=1)
+
         self._elapsed_steps = 0
         self._n_reset = 0
         self._joint_reset_every = cfg.robot.joint_reset_frequency
@@ -100,8 +115,11 @@ class RealDrawerEnv(Env):
 
     def _goal_look_up(self, *args):
         try:
-            tf_stamped = self.tfBuffer.lookup_transform(self._ref_frame, self._drawer_frame, rospy.Time(0))
-            
+            if self._drawer_measurement_frame is not None:
+                tf_stamped = self.tfBuffer.lookup_transform(self._drawer_measurement_frame, self._drawer_frame, rospy.Time(0))
+            else:
+                tf_stamped = self.tfBuffer.lookup_transform(self._ref_frame, self._drawer_frame, rospy.Time(0))
+
             self._ref_P_drawer = Point3(tf_stamped.transform.translation.x, 
                                         tf_stamped.transform.translation.y, 
                                         tf_stamped.transform.translation.z)
@@ -117,11 +135,10 @@ class RealDrawerEnv(Env):
         out = {}
         for k, n in self.noise_samplers.items(): 
             out.update(dict(zip([f'{k}_noise_{x}' for x in 'xyz'], n.sample())))
-        robot_P_ee = self._robot.state.O_T_EE[:3, 3].flatten()
-        robot_R_ee = sm.UnitQuaternion(self._robot.state.O_T_EE[:3, :3])
-        out.update(dict(zip([f'ee_pose_{x}' for x in 'x,y,z'.split(',')], robot_P_ee)))
-        out.update(dict(zip([f'ee_pose_{x}' for x in 'qx,qy,qz'.split(',')], robot_R_ee.v)))
-        out['ee_pose_qw'] = robot_R_ee.s
+        
+        robot_T_ee = Transform.from_matrix(self._robot.state.O_T_EE)
+        out.update(dict(zip([f'ee_pose_{x}' for x in 'x,y,z'.split(',')], robot_T_ee.position)))
+        out.update(dict(zip([f'ee_pose_{x}' for x in 'qx,qy,qz,qw'.split(',')], robot_T_ee.quaternion)))
         return out
 
     @property
@@ -180,14 +197,15 @@ class RealDrawerEnv(Env):
             try:
                 tf_stamped = self.tfBuffer.lookup_transform(self._robot_frame, self._ref_frame, rospy.Time(0))
                 
-                quat = sm.UnitQuaternion(tf_stamped.transform.rotation.w,
-                                         (tf_stamped.transform.rotation.x,
-                                          tf_stamped.transform.rotation.y,
-                                          tf_stamped.transform.rotation.z))
+                quat = Quaternion(tf_stamped.transform.rotation.x,
+                                  tf_stamped.transform.rotation.y,
+                                  tf_stamped.transform.rotation.z,
+                                  tf_stamped.transform.rotation.w)
 
-                self._robot_T_ref = sm.SE3.Rt(quat.R, (tf_stamped.transform.translation.x, 
-                                                       tf_stamped.transform.translation.y, 
-                                                       tf_stamped.transform.translation.z))
+                self._robot_T_ref = Transform(Point3(tf_stamped.transform.translation.x, 
+                                                     tf_stamped.transform.translation.y, 
+                                                     tf_stamped.transform.translation.z),
+                                              quat)
                 self._ref_T_robot = self._robot_T_ref.inv()
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
                 print(f'Trying to lookup reference frame {self._ref_frame} in {self._robot_frame}')
@@ -198,16 +216,16 @@ class RealDrawerEnv(Env):
             if self._ref_P_drawer is None:
                 print('Waiting for drawer to be registered')
             else:
-                ref_T_ee_goal = self._ref_T_robot * self._robot.state.O_T_EE
+                ref_T_ee_goal = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
 
-                if self._handle_safe_zone.inside(ref_T_ee_goal[:3, 3]):
+                if self._handle_safe_zone.inside(ref_T_ee_goal.position):
                     robot_T_ee_goal = self._robot.state.O_T_EE * 1
-                    robot_T_ee_goal[2, 3] += 0.02
+                    robot_T_ee_goal[2, 3] += 0.03
                     self._robot.async_move_ee_cart_absolute(robot_T_ee_goal)
                 else:
-                    if self._ref_P_drawer.z <= 0.015:
+                    if self._ref_P_drawer.x <= 0.065:
                         break
-                    print(f'Waiting for drawer position to be less than 0.015. Currently: {self._ref_P_drawer.z}')
+                    print(f'Waiting for drawer position to be less than 0.045. Currently: {self._ref_P_drawer.x}')
 
             rospy.sleep(0.3)
 
@@ -220,8 +238,9 @@ class RealDrawerEnv(Env):
         # Reset joint space position every couple of episodes
         if self._n_reset % self._joint_reset_every == 0:
             rospy.sleep(0.3)
-            for tries in range(5):
+            for tries in range(30):
                 try:
+                    self._robot.authorize_reset()
                     self._robot.move_joint_position(self._arm_reset_pose, 0.15)
                     break
                 except RobotUnresponsiveException:
@@ -232,25 +251,21 @@ class RealDrawerEnv(Env):
 
         print('Bla4')
         while True:
-            starting_position = self._robot_T_ref * Point3(*self.starting_position_sampler.sample())
-            starting_pose     = sm.SE3.Rt(self._ee_rot, starting_position)
+            starting_position = self._robot_T_ref.dot(Point3(*self.starting_position_sampler.sample()))
+            starting_pose     = Transform(starting_position, self._ik_ee_rot)
 
-            q_start, ik_success, failure, _, residual = self._ik_model.ik_lm_chan(starting_pose, q0=self._arm_reset_pose)
+            q_start = self._ik_ee_link.ik(starting_pose)[:7]
 
-            if ik_success:
-                if self._is_tower_collision(q_start):
-                    print('IK SOLUTION WOULD COLLIDE WITH TOWER. GOING AGAIN.')
-                    continue
+            if self._is_tower_collision(q_start):
+                print('IK SOLUTION WOULD COLLIDE WITH TOWER. GOING AGAIN.')
+                continue
+            break
 
-                print(f'FAKE MOVE ROBOT TO IK SOLUTION FOR SAMPLED\n{starting_pose}\nQ: {q_start}')
-                break
-            else:
-                print(f'IK FAILED! RESIDUAL {residual} "{failure}"\n{starting_pose}')
-
-        print('Bla5')
+        print(f'Moving robot to new starting pose: {starting_pose} ({q_start})')
         rospy.sleep(0.3)
-        for tries in range(5):
+        for tries in range(30):
             try:
+                self._robot.authorize_reset()
                 self._robot.move_joint_position(q_start, vel_scale=0.15)
                 break
             except RobotUnresponsiveException:
@@ -258,9 +273,10 @@ class RealDrawerEnv(Env):
         else:
             raise TotalRobotFailure('Robot does not move.')
 
+        self._ee_rot = Quaternion.from_matrix(self._robot.state.O_T_EE)
         self._robot.set_gripper_position(0.0)
 
-        self.ref_P_v_goal = self._robot.state.O_T_EE[:3, 3].flatten()
+        self.ref_P_v_goal = Point3(*self._robot.state.O_T_EE[:3, 3].flatten())
 
         self._robot.cm.activate_controller(self._robot.CART_IMPEDANCE_CONTROLLER)
         rospy.sleep(0.3)
@@ -275,39 +291,41 @@ class RealDrawerEnv(Env):
         
         self._n_reset +=1
 
+        self._should_reset = False
+
         return self.observation()
 
     def step(self, action):
         if type(action) != dict:
             raise Exception(f'Action needs to be a dict with the fields "motion" and "gripper"')
 
-        action_motion = action['motion'] / max(np.abs(action['motion']).max(), 1)
+        action_motion = Vector3(*(action['motion'] / max(np.abs(action['motion']).max(), 1)))
 
-        ref_T_ee  = self._ref_T_robot * self._robot.state.O_T_EE
-        ref_P_ee_pos = ref_T_ee[:3, 3].flatten()
+        ref_T_ee     = self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE))
+        ref_P_ee_pos = ref_T_ee.position
         
         self.ref_P_v_goal += action_motion * self.dt
 
-        ee_vp_delta = Point3(*self.ref_P_v_goal) - Point3(*ref_P_ee_pos)
+        ee_vp_delta = self.ref_P_v_goal - ref_P_ee_pos
 
         if ee_vp_delta.norm() > VCONTROL_CLAMP:
             self.ref_P_v_goal = ref_P_ee_pos + (ee_vp_delta * Vector3(1, 0.9, 1)).normalized() * VCONTROL_CLAMP
 
-        ref_T_ee_goal = np.array(sm.SE3.Rt(ref_T_ee[:3, :3], self.ref_P_v_goal, check=False))
+        ref_T_ee_goal = Transform(self.ref_P_v_goal, ref_T_ee.quaternion)
 
         # print(ref_T_ee_goal)
 
-        robot_T_ee_goal = self._robot_T_ref * ref_T_ee_goal
-        robot_T_ee_goal[:3, :3] = self._ee_rot
+        robot_T_ee_goal = self._robot_T_ref.dot(ref_T_ee_goal)
+        robot_T_ee_goal.quaternion = self._ee_rot
 
         if self._vis is not None:
             self._vis.begin_draw_cycle('action')
             self._vis.draw_vector('action', self._robot.state.O_T_EE[:3, 3], 
-                                            self._robot_T_ref.R * action_motion)
-            self._vis.draw_poses('action', np.eye(4), 0.1, 0.003, [robot_T_ee_goal])
+                                            self._robot_T_ref.dot(action_motion))
+            self._vis.draw_poses('action', np.eye(4), 0.1, 0.003, [robot_T_ee_goal.matrix()])
             self._vis.render('action')
 
-        self._robot.async_move_ee_cart_absolute(robot_T_ee_goal)
+        self._robot.async_move_ee_cart_absolute(robot_T_ee_goal.matrix())
 
         rospy.sleep(self.dt)
 
@@ -322,29 +340,38 @@ class RealDrawerEnv(Env):
             print('Waiting for reference frame and endeffector frame')
             rospy.sleep(0.1)
 
-        out = {'position'      : (self._ref_T_robot * self._robot.state.O_T_EE)[:3, 3].flatten(),
+        out = {'position'      : (self._ref_T_robot.dot(Point3(*self._robot.state.O_T_EE[:3, 3].flatten()))).numpy(),
             #    'gripper_width' : sum(self.robot.joint_state[j.name].position for j in self.gripper_joints),
-               'force'         : (self._ref_T_robot.R * self._robot.state.ext_force),
-               'torque'        : (self._ref_T_robot.R * self._robot.state.ext_torque)}
+               'force'         : (self._ref_T_robot.dot(Vector3(*self._robot.state.ext_force))).numpy(),
+               'torque'        : (self._ref_T_robot.dot(Vector3(*self._robot.state.ext_torque))).numpy()}
         
         return out
 
     def close(self):
         pass
 
+    def _cb_joy(self, msg : JoyMsg):
+        if msg.buttons[1] > 0:
+            self._should_reset = True
+
     def is_terminated(self):
         """Checks if the episode is terminated
 
         Returns:
             tuple: (Done, Success)
-        """        
+        """
+        # Human reset
+        if self._should_reset:
+            print('Human has signaled end of episode.')
+            return True, False
+
         # Robot has faulted
         if not self._robot.is_operational:
             print('Termination due to inoperative robot')
             return True, False
 
         # Robot ran away
-        if not self.workspace.inside((self._ref_T_robot * self._robot.state.O_T_EE)[:3,3]):
+        if not self.workspace.inside(self._ref_T_robot.dot(Transform.from_matrix(self._robot.state.O_T_EE).position)):
             print('EE is not in safety area')
             return True, False
 
@@ -355,10 +382,11 @@ class RealDrawerEnv(Env):
         if self._robot.state.ext_force is not None:
             force_violation = max(np.abs(self._robot.state.ext_force) > self._f_ext_limit)
             if force_violation:
+                print(f'Robot experienced too much external force: {self._robot.state.ext_force}')
                 return True, False
 
         # Horizontal goal, vertical goal
-        if self._ref_P_drawer is not None and self._ref_P_drawer.z >= self._target_position:
+        if self._ref_P_drawer is not None and self._ref_P_drawer.x >= self._target_position:
             print('Terminated due to drawer being open')
             return True, True
 
