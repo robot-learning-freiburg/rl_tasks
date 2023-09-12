@@ -95,6 +95,10 @@ class HatchEnv(Env):
                                                 Transform(Point3(-0.1, 0, 0.1), 
                                                           Quaternion.from_euler(0, np.deg2rad(30), -np.deg2rad(60))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
                                                 self.door)
+        self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
+                                                50, 0.1, 10.0, 
+                                                Transform.from_xyz_rpy(0, -0.25, 0, 0, 0, np.deg2rad(90)),
+                                                self.robot.links['gripper_cam'])
 
         self._elapsed_steps = 0
 
@@ -135,7 +139,8 @@ class HatchEnv(Env):
                           'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
                           'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
                           'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                          'doorpos':       BoxSpace(low=-0.15, high=1.5, shape=(1,))
+                          'doorpos':       BoxSpace(low=-0.15, high=1.5, shape=(1,)),
+                          'rgb_gripper':   BoxSpace(low=-1, high=1, shape=(3, 84, 84))
                          })
 
     @property
@@ -161,6 +166,10 @@ class HatchEnv(Env):
     def render(self, mode='rgb_array'):
         return self.render_camera.rgb()
 
+    def get_camera_obs(self):
+        rgb = np.moveaxis(self.gripper_camera.rgb(), 2, 0)
+        return rgb
+        
     def reset(self, initial_conditions=None):
         """Resets the environment. Optionally the state can be set using a dictionary
            returned by config_dict().
@@ -272,7 +281,8 @@ class HatchEnv(Env):
                'gripper_width' : sum(self.robot.joint_state[j.name].position for j in self.gripper_joints),
                'force'         : ref_T_w.dot(ft_in_w.linear).numpy(),
                'torque'        : ref_T_w.dot(ft_in_w.angular).numpy(),
-               'doorpos'       : self.door_position
+               'doorpos'       : self.door_position,
+               'rgb_gripper'   : self.get_camera_obs()
                }
         for k in out:
             if k in self.noise_samplers:

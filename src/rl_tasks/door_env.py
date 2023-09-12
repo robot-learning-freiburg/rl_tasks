@@ -84,6 +84,10 @@ class DoorEnv(Env):
                                                 Transform(Point3(-0.1, 0, 0.1), 
                                                           Quaternion.from_euler(0, np.deg2rad(30), -np.deg2rad(60))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
                                                 self.door)
+        self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
+                                                50, 0.1, 10.0, 
+                                                Transform.from_xyz_rpy(0, -0.05, 0, 0, 0, np.deg2rad(90)),
+                                                self.robot.links['gripper_cam'])
 
         self._elapsed_steps = 0
 
@@ -125,7 +129,8 @@ class DoorEnv(Env):
                           'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
                           'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
                           'doorpos':       BoxSpace(low=0.00, high=1.5708, shape=(1,)),
-                          'handlepos':     BoxSpace(low=0.00, high=0.7854, shape=(1,))
+                          'handlepos':     BoxSpace(low=0.00, high=0.7854, shape=(1,)),
+                          'rgb_gripper':   BoxSpace(low=-1, high=1, shape=(3, 84, 84))
                          })
 
     @property
@@ -151,7 +156,11 @@ class DoorEnv(Env):
 
     def render(self, mode='rgb_array'):
         return self.render_camera.rgb()
-
+    
+    def get_camera_obs(self):
+        rgb = np.moveaxis(self.gripper_camera.rgb(), 2, 0)
+        return rgb
+    
     def reset(self, initial_conditions=None):
         """Resets the environment. Optionally the state can be set using a dictionary
            returned by config_dict().
