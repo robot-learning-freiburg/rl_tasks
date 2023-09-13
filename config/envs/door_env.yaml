@@ -7,6 +7,9 @@ action_frequency: 30
 # Angle at which the door is considered open.
 open_threshold: 35 # Degrees
 
+# Render camera observations -- Faster without
+gripper_camera: False
+
 # Configuration of the door
 door:
   # Path to the URDF file of the door

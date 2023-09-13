@@ -7,6 +7,9 @@ action_frequency: 30
 # Relative Y-position at which the hatch is considered open.
 goal_threshold: 0.15 # Meters
 
+# Render camera observations -- Faster without
+gripper_camera: False
+
 # Configuration of the hatch door
 door:
   # Path to the URDF file of the door

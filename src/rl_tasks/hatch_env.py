@@ -98,7 +98,7 @@ class HatchEnv(Env):
         self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
                                                 50, 0.1, 10.0, 
                                                 Transform.from_xyz_rpy(0, -0.25, 0, 0, 0, np.deg2rad(90)),
-                                                self.robot.links['gripper_cam'])
+                                                self.robot.links['gripper_cam']) if cfg.gripper_camera else None
 
         self._elapsed_steps = 0
 
@@ -134,14 +134,16 @@ class HatchEnv(Env):
     @property
     @lru_cache(1)
     def observation_space(self):
-        return DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
-                                                    high=self.workspace.max.numpy()),
-                          'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
-                          'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                          'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                          'doorpos':       BoxSpace(low=-0.15, high=1.5, shape=(1,)),
-                          'rgb_gripper':   BoxSpace(low=-1, high=1, shape=(3, 84, 84))
-                         })
+        d = DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
+                                                 high=self.workspace.max.numpy()),
+                       'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
+                       'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
+                       'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
+                       'doorpos':       BoxSpace(low=-0.15, high=1.5, shape=(1,)),
+                      })
+        if self.gripper_camera is not None:
+            self.gripper_camera['rgb_gripper'] = BoxSpace(low=-1, high=1, shape=(3, 84, 84))
+        return d
 
     @property
     @lru_cache(1)
@@ -282,8 +284,10 @@ class HatchEnv(Env):
                'force'         : ref_T_w.dot(ft_in_w.linear).numpy(),
                'torque'        : ref_T_w.dot(ft_in_w.angular).numpy(),
                'doorpos'       : self.door_position,
-               'rgb_gripper'   : self.get_camera_obs()
                }
+        if self.gripper_camera is not None:
+            out['rgb_gripper'] = self.get_camera_obs()
+
         for k in out:
             if k in self.noise_samplers:
                 out[k] += self.noise_samplers[k].sample()

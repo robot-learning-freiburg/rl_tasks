@@ -87,7 +87,7 @@ class DoorEnv(Env):
         self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
                                                 50, 0.1, 10.0, 
                                                 Transform.from_xyz_rpy(0, -0.05, 0, 0, 0, np.deg2rad(90)),
-                                                self.robot.links['gripper_cam'])
+                                                self.robot.links['gripper_cam']) if cfg.gripper_camera else None
 
         self._elapsed_steps = 0
 
@@ -123,15 +123,17 @@ class DoorEnv(Env):
     @property
     @lru_cache(1)
     def observation_space(self):
-        return DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
+        d = DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
                                                     high=self.workspace.max.numpy()),
-                          'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
-                          'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                          'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                          'doorpos':       BoxSpace(low=0.00, high=1.5708, shape=(1,)),
-                          'handlepos':     BoxSpace(low=0.00, high=0.7854, shape=(1,)),
-                          'rgb_gripper':   BoxSpace(low=-1, high=1, shape=(3, 84, 84))
-                         })
+                       'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
+                       'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
+                       'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
+                       'doorpos':       BoxSpace(low=0.00, high=1.5708, shape=(1,)),
+                       'handlepos':     BoxSpace(low=0.00, high=0.7854, shape=(1,)),
+                       })
+        if self.gripper_camera is not None:
+            d['rgb_gripper'] = BoxSpace(low=-1, high=1, shape=(3, 84, 84))
+        return d
 
     @property
     @lru_cache(1)
@@ -247,7 +249,11 @@ class DoorEnv(Env):
                'force'         : self.eef_ft_sensor.get().linear.numpy(),
                'torque'        : self.eef_ft_sensor.get().angular.numpy(),
                'doorpos'       : self.door.joint_state['hinge_joint'].position,
-               'handlepos'     : self.door.joint_state['handle_joint'].position}
+               'handlepos'     : self.door.joint_state['handle_joint'].position,
+               }
+        if self.gripper_camera is not None:
+            out['rgb_gripper'] = self.get_camera_obs()
+
         for k in out:
             if k in self.noise_samplers:
                 out[k] += self.noise_samplers[k].sample()
