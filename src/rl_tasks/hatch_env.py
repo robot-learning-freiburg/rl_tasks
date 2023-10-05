@@ -30,7 +30,7 @@ from .utils     import BoxSampler, \
 
 class HatchEnv(Env):
     def __init__(self, cfg, show_gui=False):
-        self.sim = Simulator(cfg.action_frequency, use_egl=not show_gui)
+        self.sim = Simulator(cfg.action_frequency, use_egl=False) #not show_gui)
         self.sim.init('gui' if show_gui else 'direct')
 
         self.dt        = 1 / cfg.action_frequency
@@ -77,6 +77,16 @@ class HatchEnv(Env):
 
         self.eef_ft_sensor = self.robot.get_ft_sensor(cfg.robot.ft_joint)
 
+        self.render_camera  = PerspectiveCamera(self.sim, self.render_size[:2], 
+                                                50, 0.1, 10.0, 
+                                                Transform(Point3(-0.1, 0, 0.1), 
+                                                          Quaternion.from_euler(0, np.deg2rad(30), -np.deg2rad(60))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
+                                                self.door)
+        self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
+                                                50, 0.1, 10.0, 
+                                                Transform.from_xyz_rpy(0, -0.25, 0, 0, 0, np.deg2rad(90)),
+                                                self.robot.links['gripper_cam']) if cfg.gripper_camera else None
+
         self.noise_samplers = {k: NoiseSampler(s.shape, 
                                                cfg.noise[k].variance, 
                                                cfg.noise[k].constant) for k, s in self.observation_space.sample().items() if k in cfg.noise}
@@ -90,15 +100,6 @@ class HatchEnv(Env):
         else:
             raise Exception(f'Unknown controller "{cfg.robot.controller}"')
 
-        self.render_camera  = PerspectiveCamera(self.sim, self.render_size[:2], 
-                                                50, 0.1, 10.0, 
-                                                Transform(Point3(-0.1, 0, 0.1), 
-                                                          Quaternion.from_euler(0, np.deg2rad(30), -np.deg2rad(60))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
-                                                self.door)
-        self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
-                                                50, 0.1, 10.0, 
-                                                Transform.from_xyz_rpy(0, -0.25, 0, 0, 0, np.deg2rad(90)),
-                                                self.robot.links['gripper_cam']) if cfg.gripper_camera else None
 
         self._elapsed_steps = 0
 
@@ -142,7 +143,7 @@ class HatchEnv(Env):
                        'doorpos':       BoxSpace(low=-0.15, high=1.5, shape=(1,)),
                       })
         if self.gripper_camera is not None:
-            self.gripper_camera['rgb_gripper'] = BoxSpace(low=-1, high=1, shape=(3, 84, 84))
+            d['rgb_gripper'] = BoxSpace(low=-1, high=1, shape=(3, 84, 84))
         return d
 
     @property
