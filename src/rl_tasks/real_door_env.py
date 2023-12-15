@@ -8,6 +8,7 @@ try:
                                 RobotUnresponsiveException
     import kv_lite as kv
     import kv_control as kvc
+    import cv_bridge
 
     from kv_lite import gm
     
@@ -15,7 +16,8 @@ try:
     
     from geometry_msgs.msg import WrenchStamped as WrenchStampedMsg
     from std_msgs.msg      import Float64       as Float64Msg
-    from sensor_msgs.msg   import Joy           as JoyMsg
+    from sensor_msgs.msg   import Joy           as JoyMsg, \
+                                  Image         as ImageMsg
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
     JoyMsg = type(None)
@@ -115,10 +117,23 @@ class RealDoorEnv(Env):
 
         self._sub_joy = rospy.Subscriber('/joy', JoyMsg, callback=self._cb_joy, queue_size=1)
 
+        if cfg.static_camera:
+            self._cv_bridge = cv_bridge.CvBridge()
+            self._image_crop = np.array([cfg.image_crop[1],
+                                         cfg.image_crop[0],
+                                         cfg.image_crop[2]], dtype=np.int32)
+            self._sub_rgb   = rospy.Subscriber('/camera/color/image_raw', ImageMsg, self._cb_camera_frame, queue_size=1)
+        else:
+            self._sub_rgb = None
+
         self._elapsed_steps = 0
         self._n_reset = 0
         self._joint_reset_every = cfg.robot.joint_reset_frequency
         self._goal_lookup_timer = rospy.Timer(rospy.Duration(0.1), self._goal_look_up)
+
+    def _cb_camera_frame(self, msg : ImageMsg):
+        self._last_image = self._cv_bridge.imgmsg_to_cv2(msg)[self._image_crop[0]:self._image_crop[0]+self._image_crop[2],
+                                                              self._image_crop[1]:self._image_crop[1]+self._image_crop[2], :3]
 
     def _goal_look_up(self, *args):
         try:
@@ -156,12 +171,15 @@ class RealDoorEnv(Env):
     @property
     @lru_cache(1)
     def observation_space(self):
-        return DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
+        out = DictSpace({'position':      BoxSpace(low=self.workspace.min.numpy(), 
                                                     high=self.workspace.max.numpy()),
                         #   'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
                           'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
                           'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5)
                          })
+        if self._sub_rgb is not None:
+            out['rgb_static'] = BoxSpace(low=-1, high=1, shape=(3, self._image_crop[2], self._image_crop[2]))
+        return out
 
     @property
     @lru_cache(1)
@@ -329,6 +347,11 @@ class RealDoorEnv(Env):
         self.pub_ang_stiffness.publish(msg_ang_stiffness)
         rospy.sleep(0.3)
 
+        if self._sub_rgb is not None:
+            while self._last_image is None:
+                print('Waiting for new RGB observation')
+                rospy.sleep(0.05)
+
         print('Reset done!')
         self._elapsed_steps = 0
         
@@ -386,6 +409,10 @@ class RealDoorEnv(Env):
                'force'         : (self._ref_T_robot.dot(Vector3(*self._robot.state.ext_force))).numpy(),
                'torque'        : (self._ref_T_robot.dot(Vector3(*self._robot.state.ext_torque))).numpy()}
         
+        if self._sub_rgb is not None:
+            while self._last_image is None:
+                rospy.sleep(0.05)
+            out['rgb_static'] = np.moveaxis(self._last_image, 2, 0)
         return out
 
     def close(self):
