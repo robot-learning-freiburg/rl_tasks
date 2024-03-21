@@ -21,6 +21,7 @@ try:
 except ModuleNotFoundError: # Just don't load this if we don't have the panda lib present
     Panda = None
     JoyMsg = type(None)
+    ImageMsg = type(None)
 
 import prime_bullet as pb
 from prime_bullet import Point3,            \

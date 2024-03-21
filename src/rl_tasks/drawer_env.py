@@ -30,12 +30,12 @@ from .utils     import BoxSampler, \
 
 class DrawerEnv(Env):
     def __init__(self, cfg, show_gui=False):
-        self.sim = Simulator(cfg.action_frequency, use_egl=False) #not show_gui)
+        self.sim = Simulator(cfg.action_frequency, use_egl=False, real_time=False) #not show_gui)
         self.sim.init('gui' if show_gui else 'direct')
 
         self.dt        = 1 / cfg.action_frequency
         self.workspace = AABB(Point3(0.3, -0.85, 0), 
-                              Point3(0.85, 0.85, 0.8))
+                              Point3(0.85, 0.85, 0.9))
 
         self.robot = self.sim.load_urdf(cfg.robot.path, useFixedBase=True)
         self.eef   = self.robot.get_link(cfg.robot.eef)
@@ -71,8 +71,8 @@ class DrawerEnv(Env):
 
         self.render_camera  = PerspectiveCamera(self.sim, self.render_size[:2], 
                                                 50, 0.1, 10.0, 
-                                                Transform(Point3(-0.1, 0, 0.1), 
-                                                          Quaternion.from_euler(0, np.deg2rad(30), -np.deg2rad(60))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
+                                                Transform(Point3(0.4, 0, 0.1), 
+                                                          Quaternion.from_euler(0, np.deg2rad(30), np.deg2rad(120))).dot(Transform.from_xyz(-1.2, 0, 0.1)),
                                                 self.shelf)
         self.gripper_camera  = PerspectiveCamera(self.sim, (84, 84), 
                                                 50, 0.1, 10.0, 
@@ -130,7 +130,7 @@ class DrawerEnv(Env):
                        'gripper_width': BoxSpace(low=0.03, high=0.11, shape=(1,)),
                        'force':         BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
                        'torque':        BoxSpace(np.ones(3) * -5, np.ones(3) * 5),
-                       'drawerpos':       BoxSpace(low=0.00, high=1.5708, shape=(1,)),
+                       'drawerpos':     BoxSpace(low=0.00, high=1.5708, shape=(1,)),
                        'handlepos':     BoxSpace(low=0.00, high=0.7854, shape=(1,)),
                        })
         if self.gripper_camera is not None:
@@ -151,7 +151,7 @@ class DrawerEnv(Env):
         Returns:
             dict: Neutral action.
         """
-        return {'motion': np.zeros(3), 'gripper': 0.5}
+        return {'motion': np.zeros(3), 'gripper': 0.0}
 
 
     @property
@@ -241,7 +241,7 @@ class DrawerEnv(Env):
         return self.reference_link.pose
 
     def observation(self):
-        out = {'position'      : self.reference_frame.inv().dot(self.eef.pose.position).numpy(),
+        out = {'position'      : self.eef.pose.position.numpy(),
                'gripper_width' : sum(self.robot.joint_state[j.name].position for j in self.gripper_joints),
                'force'         : self.eef_ft_sensor.get().linear.numpy(),
                'torque'        : self.eef_ft_sensor.get().angular.numpy(),
@@ -267,6 +267,7 @@ class DrawerEnv(Env):
         """        
         # Robot ran away
         if not self.workspace.inside(self.eef.pose.position):
+            print('Robot left workspace')
             return True, False
 
         door_pos = self.shelf.joint_state['drawer_top_joint'].position
@@ -275,6 +276,7 @@ class DrawerEnv(Env):
 
         # Horizontal goal, vertical goal
         if door_pos >= self._target_position:
+            print('Drawer is open')
             return True, True
 
         return False, False

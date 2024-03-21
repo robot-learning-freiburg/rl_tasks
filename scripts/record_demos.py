@@ -112,17 +112,21 @@ if __name__ == '__main__':
     neutral_action = env.neutral_action
 
     print('STARTING RECORDING!'
-          '\n  Press X to reset the env, discarding the current episode.'
-          '\n  Press B to save the current demonstration even without the environment indicating termination.'
+          '\n  Press B to reset the env, discarding the current episode.'
+          '\n  Press X to save the current demonstration even without the environment indicating termination.'
           '\n  Press Y to quit. Episode will not be saved.')
 
     while not rospy.is_shutdown():
         if done:
             if success:
-                save_path = out_dir / f'demo_{demo_count:03d}.npz'
+                while True:
+                    save_path = out_dir / f'demo_{demo_count:03d}.npz'
+                    if not save_path.exists():
+                        break
+                    demo_count += 1
+
                 print(f'Saving demo to "{save_path}"')
                 np.savez(save_path, **traj_obs)
-                demo_count += 1
 
             traj_obs = {o: [] for o in observations}
             traj_obs.update({'ACTION': [], 'REWARD': [], 'DONE': []})
@@ -134,7 +138,7 @@ if __name__ == '__main__':
             
             # Clear button presses
             gamepad.reset()
-            print(f'ENV RESET. STARTING EPISODE: {demo_count}\nWAITING FOR INPUT')
+            print(f'ENV RESET. STARTING EPISODE: {demo_count + 1}\nWAITING FOR INPUT')
         
         while not gamepad.is_ready:
             pass
@@ -161,7 +165,7 @@ if __name__ == '__main__':
 
         # Episode is done when env says, or user says
         done    = done or gamepad.is_pressed('X') or gamepad.is_pressed('B')
-        success = (success or gamepad.is_pressed('B')) and not gamepad.is_pressed('X')
+        success = (success or gamepad.is_pressed('X')) and not gamepad.is_pressed('B')
 
         if gamepad.is_pressed('Y'):
             print('Ending application.')
